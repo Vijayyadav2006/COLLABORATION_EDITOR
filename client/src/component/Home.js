@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import "./Home.css";
 
 function Home() {
-    <img className="img-fluid mx-auto d-block" src ="/images/logo.png" alt="logo" style={{maxWidth:"50-px", display: "block", margin: "10px auto 0"}} />
+    <img className="img-fluid mx-auto d-block" src ="/images/logo.png" alt="logo" style={{maxWidth:"50-px"}} />
   const [roomId, setRoomId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
