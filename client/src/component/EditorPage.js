@@ -1,167 +1,148 @@
-import React, { useState, useEffect } from "react";
-import PropTypes from "prop-types";
+import React, { useState, useEffect, useRef } from "react";
+import Client from "./Client";
+import ace from "ace-builds/src-noconflict/ace";
+import "ace-builds/src-noconflict/mode-c_cpp";
+import "ace-builds/src-noconflict/mode-php";
+import "ace-builds/src-noconflict/mode-python";
+import "ace-builds/src-noconflict/mode-javascript";
+import "ace-builds/src-noconflict/mode-java";
+import $ from "jquery";
+import "./style.css";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
-import { v4 as uuid } from "uuid";
-import { useNavigate, useLocation } from "react-router-dom";
-import "./home.css";
+import { initSocket } from "../socket";
 
-function Home() {
-  const [roomId, setRoomId] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
+function EditorPage({ onCodeChange }) {
+  const { roomId } = useParams();
+  const [clients, setClients] = useState([]);
+  const [userInput, setUserInput] = useState("");
+  const [output, setOutput] = useState("");
   const location = useLocation();
+  const navigate = useNavigate();
+  const [language, setLanguage] = useState("c");
+  const editorRef = useRef(null);
+  const socketRef = useRef(null);
+
+  const username = location.state?.username;
+  const email = location.state?.email;
 
   useEffect(() => {
-    if (location.state) {
-      setFirstName(location.state.firstName || "");
-      setLastName(location.state.lastName || "");
-      setEmail(location.state.email || "");
-    }
-  }, [location.state]);
-
-  const generateRoomId = (e) => {
-    e.preventDefault();
-    const id = uuid();
-    setRoomId(id);
-    toast.success("Congratulations on generating the Room ID! 🎉");
-  };
-
-  const joinRoom = async (e) => {
-    e.preventDefault();
-    if (!roomId.trim() || !firstName.trim() || !lastName.trim()) {
-      toast.error("Please enter the Room ID, First Name, and Last Name");
+    if (!username) {
+      toast.error("Username is required");
+      navigate('/');
       return;
     }
-    if (isUsernameTaken(firstName)) {
-      setError("Username is already taken. Please choose another one.");
-      return;
-    }
-    navigate(`/editor/${roomId}`, {
-      state: { username: `${firstName} ${lastName}`, email },
+    if (socketRef.current) return;
+
+    const init = async () => {
+      socketRef.current = await initSocket();
+      socketRef.current.emit("join", { roomId, username });
+
+      socketRef.current.on("joined", ({ clients, username: joinedUser }) => {
+        setClients(clients);
+        if (joinedUser !== username) toast.success(`${joinedUser} joined`);
+      });
+
+      socketRef.current.on("left", ({ socketId, username }) => {
+        toast.success(`${username} left`);
+        setClients((prev) => prev.filter((client) => client.socketId !== socketId));
+      });
+    };
+
+    init();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        ['joined', 'left'].forEach(event => socketRef.current.off(event));
+      }
+      if (editorRef.current) {
+        editorRef.current.destroy();
+        editorRef.current = null;
+      }
+    };
+  }, [roomId, username, navigate]);
+
+  useEffect(() => {
+    const editor = ace.edit("editor");
+    editor.session.setMode("ace/mode/c_cpp");
+    editor.setOptions({
+      fontSize: "14px",
+      fontFamily: "Courier New, monospace",
+      cursorStyle: "slim",
+      showPrintMargin: false,
+      wrap: true,
     });
-    toast.success("You have successfully joined the room! 🎉");
-  };
+    editorRef.current = editor;
+    return () => {
+      editor.destroy();
+    };
+  }, []);
 
-  const isUsernameTaken = (username) => {
-    return false; // Implement your logic to check if the username is taken
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("firstName");
-    localStorage.removeItem("lastName");
-    localStorage.removeItem("email");
-    toast.success("You have successfully logged out!");
-    navigate("/login");
-  };
-
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
-    joinRoom(e);
-  };
-
-  useEffect(() => {
-    // Enable the submit button if the form is valid
-    const isFormValid = roomId.trim() && firstName.trim() && lastName.trim();
-    const submitButton = document.querySelector("button[type='submit']");
-    if (submitButton) {
-      submitButton.disabled = !isFormValid;
+  const executeCode = () => {
+    const code = editorRef.current.getSession().getValue();
+    if (!code.trim()) {
+      toast.error("Code cannot be empty.");
+      return;
     }
-  }, [roomId, firstName, lastName]);
+    $.ajax({
+      url: "http://localhost/my_editor/compiler.php",
+      method: "POST",
+      data: { language, code, input: userInput },
+      success: function (response) {
+        setOutput(response);
+      },
+      error: function () {
+        toast.error("Execution Error.");
+      }
+    });
+  };
 
   return (
-    <div className="home-container">
-      <div className="home-card">
-        <div className="home-card-body">
-          <img
-            className="home-logo"
-            src="/images/logo.png"
-            alt="v_editor_logo"
-          />
-          <h4 className="home-title">Enter the Room Id</h4>
-          <form id="demo-form" onSubmit={handleFormSubmit}>
-            <div className="form-group">
-              <div className="input-group mb-3 position-relative">
-                <span className="input-group-text">
-                  <i className="fas fa-door-open"></i>
-                </span>
-                <input
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                  type="text"
-                  className="form-control"
-                  placeholder="Room Id"
-                  aria-label="Room ID"
-                  required
-                />
-                {roomId && <span className="input-overlay">{roomId}</span>}
-              </div>
-              <div className="input-group mb-3 position-relative">
-                <span className="input-group-text">
-                  <i className="fas fa-user"></i>
-                </span>
-                <input
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  type="text"
-                  className="form-control"
-                  placeholder="First Name"
-                  aria-label="First Name"
-                  required
-                />
-                {firstName && <span className="input-overlay">{firstName}</span>}
-              </div>
-              <div className="input-group mb-3 position-relative">
-                <span className="input-group-text">
-                  <i className="fas fa-user"></i>
-                </span>
-                <input
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  type="text"
-                  className="form-control"
-                  placeholder="Last Name"
-                  aria-label="Last Name"
-                  required
-                />
-                {lastName && <span className="input-overlay">{lastName}</span>}
-              </div>
-              {error && <p className="text-danger">{error}</p>}
-              <button
-                type="submit"
-                className="btn btn-primary btn-lg btn-block"
-              >
-                Submit
-              </button>
-              <p className="mt-3">
-                Don't have a room id?{" "}
-                <span
-                  className="text-primary p-2"
-                  style={{ cursor: "pointer" }}
-                  onClick={generateRoomId}
-                >
-                  New Room
-                </span>
-              </p>
-            </div>
-          </form>
+    <div className="container-fluid vh-100">
+      <div className="row h-100">
+        <div className="col-md-2 d-flex flex-column h-100">
+          <img src="/images/logo.png" alt="v_editor_logo" className="img-fluid mx-auto" />
+          <hr />
+          <div className="d-flex flex-column overflow-auto">
+            {clients.length > 0 ? clients.map((client) => (
+              <Client key={client.socketId} username={client.username} />
+            )) : <div>No clients connected</div>}
+          </div>
+          <div className="mt-auto">
+            <hr />
+            <button onClick={() => navigator.clipboard.writeText(roomId)} className="btn btn-success mb-2">Copy Room Id</button>
+            <button onClick={() => navigate('/home')} className="btn btn-danger mb-2">Leave</button>
+          </div>
+        </div>
+        <div className="col-md-10 d-flex flex-column h-100">
+          <div className="header">V EDITOR</div>
+          <div className="control-panel">
+            <label htmlFor="language-select">Select Language:</label>
+            <select id="language-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+              <option value="php">PHP</option>
+              <option value="python">Python</option>
+              <option value="node">Node JS</option>
+              <option value="java">Java</option>
+            </select>
+          </div>
+          <div className="editor" id="editor"></div>
+          <div className="d-flex justify-content-end p-2">
+            <button className="btn btn-primary" onClick={executeCode}>Run</button>
+          </div>
+          <div className="input-output-section">
+            <textarea className="form-control" placeholder="Enter input here..." value={userInput} onChange={(e) => setUserInput(e.target.value)}></textarea>
+            <pre className="output">{output}</pre>
+          </div>
+          <div className="user-info">
+            <p>Logged in as: {username} ({email})</p>
+          </div>
         </div>
       </div>
-      <button onClick={handleLogout} className="btn btn-danger logout-button">
-        Logout
-      </button>
     </div>
   );
 }
 
-Home.propTypes = {
-  firstName: PropTypes.string,
-  lastName: PropTypes.string,
-  email: PropTypes.string,
-  roomId: PropTypes.string,
-  error: PropTypes.string,
-};
-
-export default Home; // Ensure Home is exported correctly
+export default EditorPage;
