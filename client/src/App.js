@@ -1,21 +1,15 @@
-import logo from './logo.svg';
-import './App.css';
-import './App.css';
-import Home from './component/Home';
+import React from "react";
 import { Routes, Route } from "react-router-dom";
-import EditorPage from "./component/EditorPage";
-import 'bootstrap/dist/css/bootstrap.min.css';
-import {Toaster} from 'react-hot-toast';
+import Home from "./component/Home";
+import Editor from "./component/Editor";
 
 function App() {
   return (
-    <>
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/editor/:roomId" element={<EditorPage onCodeChange={handleCodeChange} />} />
+      <Route path="/editor/:roomId" element={<Editor />} />
     </Routes>
-  </>
-);
+  );
 }
 
 export default App;
